@@ -1,0 +1,12 @@
+*.xlsx
+*.pdf
+*.csv
+*.txt
+*.pyc
+*.pth
+*.docx
+*.npz
+*.pth
+results
+datasets
+__pycache__/
