@@ -7,7 +7,7 @@ from datasets.load_datasets import *
 from models.ProposedKANmodel import *
 from utils.functions import *
 from train import *
-
+import numpy as np
 
 
 def main(architecture,

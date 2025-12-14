@@ -13,11 +13,7 @@ def networkTrainStep(netType, model,optimizer,lossFunction,trainLoader,numClasse
     correct    = 0
     for x,y in trainLoader:
         x = x.to(device)
-        #y = F.one_hot(y,num_classes=numClasses).type(torch.float)
-        #y = y.to(device)
-        ### img
         y = y.type(torch.LongTensor).to(device).squeeze()
-
         if gradPenaltyL:
             x.requires_grad_(True)
         optimizer.zero_grad()
@@ -26,8 +22,6 @@ def networkTrainStep(netType, model,optimizer,lossFunction,trainLoader,numClasse
         if gradPenaltyL:
             loss += gradPenaltyL * gradPenalty2sideCalc(x,output)
         loss.backward()
-        #correct += (torch.argmax(output,dim=1) == torch.argmax(y,dim=1)).sum().item()
-        ### img
         correct += (torch.argmax(output,dim=1) == y).sum().item()
         totalLoss += loss.item()
         optimizer.step()
@@ -64,8 +58,6 @@ def networkTrain(netType,model,optimizer,scheduler,lossFunction,trainLoader,test
 
     pbar = tqdm(range(epochs),desc="Epochs")
     
-    #for e in tqdm(range(epochs),desc="Epochs"):
-    
     for _ in pbar:
         trainAcc,trainLoss = networkTrainStep(netType,model,optimizer,lossFunction,trainLoader,numClasses,gradPenaltyL)
         testAcc,testLoss = networkTest(model,lossFunction,testLoader)
@@ -82,17 +74,6 @@ def networkTrain(netType,model,optimizer,scheduler,lossFunction,trainLoader,test
         testLosses.append(testLoss)
 
         pbar.set_postfix({'test_acc': f'{testAcc:.2f}%', 'AUROC1': f'{currentAurocs[0]:.2f}'})
-
-    
-    #print(f"TrainAcc:{trainAcc:>.4f}, TrainLoss:{trainLoss:>.3f}")
-    #print(f"TestAcc: {testAcc:>.4f}, TestLoss: {testLoss:>.3f}")
-    #for i,auroc in enumerate(aurocs[-1]):
-    #    print(f"AUROC {i+1}: {auroc:>.3f}")
-
-    #aurocsT = list(zip(*aurocs)) #cols
-    #plot([i for i in range(epochs)],'epochs',testAccs,'Test acc','b','-')
-    #plot([i for i in range(epochs)],'epochs',aurocsT[0],'auroc','b','-')
-
 
     return trainAccs[-1],trainLosses[-1],testAccs[-1],testLosses[-1],aurocs[-1]
 
@@ -149,16 +130,5 @@ def DeepEnsambleTrain(models,optimizers,schedulers,lossFunction,trainLoader,
         testLosses.append(testLoss)
 
         pbar.set_postfix({'test_acc': f'{testAcc:.2f}%', 'AUROC1': f'{currentAurocs[0]:.2f}'})
-
-    
-    #print(f"TrainAcc:{trainAcc:>.4f}, TrainLoss:{trainLoss:>.3f}")
-    #print(f"TestAcc: {testAcc:>.4f}, TestLoss: {testLoss:>.3f}")
-    #for i,auroc in enumerate(aurocs[-1]):
-    #    print(f"AUROC {i+1}: {auroc:>.3f}")
-
-    #aurocsT = list(zip(*aurocs)) #cols
-    #plot([i for i in range(epochs)],'epochs',testAccs,'Test acc','b','-')
-    #plot([i for i in range(epochs)],'epochs',aurocsT[0],'auroc','b','-')
-
 
     return trainAccs[-1],trainLosses[-1],testAccs[-1],testLosses[-1],aurocs[-1]

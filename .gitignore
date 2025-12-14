@@ -1,4 +1,4 @@
-*.xlsx
+#*.xlsx
 *.pdf
 *.csv
 *.txt
@@ -7,6 +7,6 @@
 *.docx
 *.npz
 *.pth
+tools.py
 results
-datasets
 __pycache__/

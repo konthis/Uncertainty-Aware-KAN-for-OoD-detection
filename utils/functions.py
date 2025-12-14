@@ -22,7 +22,7 @@ def gradPenalty2sideCalc(x, ypred):
             grad_outputs=torch.ones_like(ypred),
             create_graph=True
         )[0]
-    gradients = gradients.flatten(start_dim=1)########################################## test
+    gradients = gradients.flatten(start_dim=1)
     gradPenalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
     return gradPenalty
 

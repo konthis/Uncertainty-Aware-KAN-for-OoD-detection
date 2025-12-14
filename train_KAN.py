@@ -9,9 +9,6 @@ from models.KANmodel import *
 from train import *
 
 
-
-
-
 def main(architecture,
          grids,
          learning_rate,

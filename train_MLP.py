@@ -8,6 +8,7 @@ from datasets.load_datasets import *
 from models.MLPmodel import *
 from train import *
 from utils.functions import *
+import numpy as np
 
 
 def main(architecture,

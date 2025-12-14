@@ -1,14 +1,13 @@
 import argparse
 
-
 import torch
 from torch import nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from models.DUQmodel import *
-from models.MLPmodel import MLP
 from train import *
 from datasets.load_datasets import *
+import numpy as np
 
 def main(architecture,
          learning_rate,

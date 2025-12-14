@@ -6,7 +6,6 @@ from models.CNNmodel import *
 class DUQ(nn.Module):
     def __init__(self, inputDim,outFeatureDim,centroidDim,outputDim,std,initSigma):
         super().__init__()
-        ###### for saving
         self.fc1 = nn.Linear(inputDim, outFeatureDim)
         ## DUQ weight vector, Parameter so the optimizer and backprop get it into consideration
         ## size = centroidDim x noClasses x featureDim(prev output)

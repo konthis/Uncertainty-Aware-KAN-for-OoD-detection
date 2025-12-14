@@ -33,8 +33,6 @@ def loop_over_dataloader(model, dataloader, model_type):
     with torch.no_grad():
         scores = []
         for data, target in dataloader:
-            #data = data.cuda()
-            #target = target.cuda()
             data = data.to(train_device)
             target = target.to(train_device)
 
@@ -73,8 +71,6 @@ def get_auroc_ood(true_dataset, ood_dataset, model, device, model_type):
     dataloader, anomaly_targets = prepare_ood_datasets(true_dataset, ood_dataset)
 
     scores = loop_over_dataloader(model, dataloader, model_type)
-
-    #accuracy = np.mean(accuracies[: len(true_dataset)])
     roc_auc = roc_auc_score(anomaly_targets, scores)
 
     return roc_auc

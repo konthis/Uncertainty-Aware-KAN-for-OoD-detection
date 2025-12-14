@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from datasets.load_datasets import *
 from models.FastKANmodel import *
 from train import *
+import numpy as np
 
 def main(architecture,
          grids,
