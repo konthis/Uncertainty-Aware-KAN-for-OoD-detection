@@ -10,6 +10,8 @@ from train import *
 import numpy as np
 
 
+
+
 def main(architecture,
          grids,
          learning_rate,
@@ -53,6 +55,7 @@ def main(architecture,
         testAccs.append(testAcc)
         testLosses.append(testLoss)
         aurocs.append(auroc)
+
     print(f"TrainAcc:{np.mean(trainAccs):>.3f} std {np.std(trainAccs):>.3f}, TrainLoss:{np.mean(trainLosses):>.3f} std {np.std(trainLosses):>.3f}")
     print(f"TestAcc:{np.mean(testAccs):>.3f} std {np.std(testAccs):>.3f}, TrainLoss:{np.mean(testLosses):>.3f} std {np.std(testLosses):>.3f}")
     aurocsR = np.mean(aurocs,axis=0)
@@ -86,7 +89,7 @@ if __name__ == "__main__":
         "--learning_rate_denominator",
         type=float,
         default=0.001,
-        help="Denominator'sLearning rate (default: 0.001)",
+        help="Denominator's Learning rate (default: 0.001)",
     )
     parser.add_argument(
         "--denominator",

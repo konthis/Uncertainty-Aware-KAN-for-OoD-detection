@@ -4,6 +4,7 @@ from torch.functional import F
 from tqdm import tqdm
 from utils.functions import gradPenalty2sideCalc
 from utils.oodEvaluation import get_auroc_ood
+from visualize import plot_results
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -75,6 +76,10 @@ def networkTrain(netType,model,optimizer,scheduler,lossFunction,trainLoader,test
 
         pbar.set_postfix({'test_acc': f'{testAcc:.2f}%', 'AUROC1': f'{currentAurocs[0]:.2f}'})
 
+
+    ###############
+    plot_results(trainAccs, trainLosses, testAccs, testLosses, aurocs)
+    ###############
     return trainAccs[-1],trainLosses[-1],testAccs[-1],testLosses[-1],aurocs[-1]
 
 def DeepEnsambleTest(models, lossFunction, testLoader):
