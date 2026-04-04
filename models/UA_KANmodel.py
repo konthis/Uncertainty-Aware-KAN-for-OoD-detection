@@ -100,7 +100,7 @@ class UA_KANLayer(nn.Module):
             y = (w * self.rbf(x.to(w.dtype))).sum(-1)
         return x, y
 
-class ProposedKAN(nn.Module):
+class UA_KAN(nn.Module):
     def __init__(
         self,
         layers_hidden: List[int],

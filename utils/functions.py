@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import time
+
 class ActivationFunctions(nn.Module):
     def __init__(self,gamma):
         super(ActivationFunctions,self).__init__()
@@ -52,3 +54,29 @@ class ProposedLoss(nn.Module):
  
     def forward(self, logits: torch.Tensor, targets: torch.LongTensor) -> torch.Tensor:
         return LogitNormLoss(self.tau,self.eps).forward(logits,targets) * (1-self.lamda) + self.lamda*F.cross_entropy(logits,targets)
+
+
+
+def model_stats(model, input_size: tuple, device, n_warmup: int = 50, n_runs: int = 500):
+    # param count flops inference etc
+    model.eval()
+    dummy = torch.zeros(1, *input_size).to(device)
+
+    # Parameter count
+    total_params     = sum(p.numel() for p in model.parameters())
+
+    # Inference time — warm up then average
+    with torch.no_grad():
+        for _ in range(n_warmup):
+            model(dummy)
+        if device.type == 'cuda':
+            torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        for _ in range(n_runs):
+            model(dummy)
+        if device.type == 'cuda':
+            torch.cuda.synchronize()
+        ms_per_sample = (time.perf_counter() - t0) / n_runs * 1000
+
+    print(f"  Params (total):     {total_params:,}")
+    print(f"  Inference time:     {ms_per_sample:.4f} ms/sample")
