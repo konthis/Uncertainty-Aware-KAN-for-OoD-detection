@@ -1,76 +1,48 @@
 import numpy as np
 import torch
-from sklearn.metrics import roc_auc_score, average_precision_score
 import torch.nn.functional as F
-from matplotlib import pyplot as plt
+from sklearn.metrics import roc_auc_score
+from torch.utils.data import ConcatDataset, DataLoader
 
 
-train_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def _get_uncertainty_scores(model, dataloader, model_type: str, device: torch.device) -> np.ndarray:
+    is_ensemble = isinstance(model, list)
+    models = model if is_ensemble else [model]
+    for m in models:
+        m.eval()
 
-def prepare_ood_datasets(true_dataset, ood_dataset):
-    # Preprocess OoD dataset same as true dataset
-    datasets = [true_dataset, ood_dataset]
-
-    anomaly_targets = torch.cat(
-        (torch.zeros(len(true_dataset)), torch.ones(len(ood_dataset)))
-    )
-
-    concat_datasets = torch.utils.data.ConcatDataset(datasets)
-
-    dataloader = torch.utils.data.DataLoader(
-        concat_datasets, batch_size=500, shuffle=False, num_workers=4, pin_memory=False
-    )
-    return dataloader, anomaly_targets
-
-
-def loop_over_dataloader(model, dataloader, model_type):
-    if isinstance(model,list):
-        for m in model:
-            m.eval()
-    else:
-        model.eval()
-    global train_device
+    scores = []
     with torch.no_grad():
-        scores = []
-        for data, target in dataloader:
-            data = data.to(train_device)
-            target = target.to(train_device)
+        for data, _ in dataloader:
+            data = data.to(device)
 
-            if model_type.lower() == 'duq' or model_type == 'kanduq':
+            if model_type.lower() in ('duq', 'kanduq'):
                 output = model(data)
-                kernel_distance, pred = output.max(1)
-                uncertainty = - kernel_distance 
-            
-            elif model_type.lower() == 'mlp':
-                output = model(data)
-                uncertainty = torch.sum(output * torch.log(output+ 1e-10), dim=1)
+                kernel_distance, _ = output.max(1)
+                uncertainty = -kernel_distance
 
             elif model_type.lower() == 'kan':
-                output = model.forwardSoftmax(data) 
-                uncertainty = torch.sum(output * torch.log(output+ 1e-10), dim=1)
-            
-            else: ## embedings
-                output = []
-                for m in model:
-                    output.append(m.forward(data))
-                output = torch.stack(output, dim=0)
-                output = torch.mean(output, dim=0)
-                uncertainty = torch.sum(output * torch.log(output+ 1e-10), dim=1)
+                output = model.forwardSoftmax(data)
+                uncertainty = torch.sum(output * torch.log(output + 1e-10), dim=1)
+
+            elif is_ensemble:
+                outputs = torch.stack([m(data) for m in models]).mean(dim=0)
+                uncertainty = torch.sum(outputs * torch.log(outputs + 1e-10), dim=1)
+
+            else:  # mlp and others
+                output = model(data)
+                uncertainty = torch.sum(output * torch.log(output + 1e-10), dim=1)
 
             scores.append(uncertainty.cpu().numpy())
 
-    scores = np.concatenate(scores)
-
-    return scores
+    return np.concatenate(scores)
 
 
+def get_auroc_ood(true_dataset, ood_dataset, model, device: torch.device, model_type: str) -> float:
+    concat = ConcatDataset([true_dataset, ood_dataset])
+    dataloader = DataLoader(concat, batch_size=500, shuffle=False, num_workers=4, pin_memory=False)
+    labels = np.concatenate([np.zeros(len(true_dataset)), np.ones(len(ood_dataset))])
 
-def get_auroc_ood(true_dataset, ood_dataset, model, device, model_type):
-    global train_device
-    train_device = device
-    dataloader, anomaly_targets = prepare_ood_datasets(true_dataset, ood_dataset)
+    scores = _get_uncertainty_scores(model, dataloader, model_type, device)
+    return roc_auc_score(labels, scores)
 
-    scores = loop_over_dataloader(model, dataloader, model_type)
-    roc_auc = roc_auc_score(anomaly_targets, scores)
-
-    return roc_auc

@@ -31,7 +31,7 @@ class RadialBasisFunction(nn.Module):
     def forward(self, x):
         return torch.exp(-((x[..., None] - self.grid) / self.denominator) ** 2)
 
-class ProposedKANLayer(nn.Module):
+class UA_KANLayer(nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -114,7 +114,7 @@ class ProposedKAN(nn.Module):
     ) -> None:
         super().__init__()
         self.layers = nn.ModuleList([
-            ProposedKANLayer(
+            UA_KANLayer(
                 in_dim, out_dim,
                 grid_min=grid_min,
                 grid_max=grid_max,

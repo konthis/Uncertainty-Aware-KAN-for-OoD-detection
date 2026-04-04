@@ -8,12 +8,12 @@ from torch.utils.data import Dataset
 
 from sklearn.datasets import load_iris,load_breast_cancer,load_wine
 
+BATCH_SIZE = 16
+OOD_FEATURE_IDXS = [0, 1, 2]
 
 # 0: Non-infectious SIRS
 # 1: Sepsis
 # 2: Septic Shock
-
-BATCH_SIZE = 16
 
 def load_D1(seed,path='../datasets', only_biomarkers=True, binary=False):
 
@@ -61,14 +61,12 @@ def load_D1(seed,path='../datasets', only_biomarkers=True, binary=False):
     dimensions = X_train.shape[1]
     return test_dataset, train_loader, test_loader, dimensions
 
-def createSklearnDataloader(dataset, featureIdxs):
-    datasetX = dataset['data'][:,featureIdxs]
-    scaler = StandardScaler()
-    datasetX = scaler.fit_transform(datasetX)
-    datasetX = torch.autograd.Variable(torch.tensor(datasetX,dtype=torch.float))
-    datasetY = torch.autograd.Variable(torch.tensor(dataset['target'], dtype=torch.long))
-    dataloader = DataLoader(TensorDataset(datasetX,datasetY), batch_size=1000, shuffle=True)
-    return dataloader
+def createSklearnDataloader(dataset, feature_idxs: list) -> DataLoader:
+    X = dataset['data'][:, feature_idxs]
+    X = StandardScaler().fit_transform(X)
+    X_tensor = torch.tensor(X, dtype=torch.float32)
+    y_tensor = torch.tensor(dataset['target'], dtype=torch.long)
+    return DataLoader(TensorDataset(X_tensor, y_tensor), batch_size=1000, shuffle=True)
 
 class GaussianNoisedDataset(Dataset):
     def __init__(self, dataset, mean=3.0, std=5):
@@ -85,17 +83,20 @@ class GaussianNoisedDataset(Dataset):
         noisy_data = torch.clamp(noisy_data, data.min(), data.max()) # keep range
         return noisy_data, target
 
-def load_noisedD1(seed,root,binary):
-    _,trainloader,_,_ = load_D1(seed,root,binary=binary)
-    noiseddataset = GaussianNoisedDataset(trainloader.dataset)
-    return DataLoader(noiseddataset, batch_size=BATCH_SIZE, shuffle=True)
+def load_noisedD1(seed: int, root: str, binary: bool) -> DataLoader:
+    _, train_loader, _, _ = load_D1(seed, root, binary=binary)
+    noised = GaussianNoisedDataset(train_loader.dataset)
+    return DataLoader(noised, batch_size=BATCH_SIZE, shuffle=True)
 
-def loadAllDataloaders(root='./datasets',binary=False):
+
+def loadAllDataloaders(root: str = './datasets', binary: bool = False):
     seed = 1
-    _, ambTrainLoader, ambTestLoader, _= load_D1(seed,root,binary=binary)
-    falseloader  = createSklearnDataloader(load_wine(),[0,1,2])
-    falseloader2 = createSklearnDataloader(load_iris(),[0,1,2]) 
-    falseloader3 = createSklearnDataloader(load_breast_cancer(),[0,1,2])
-    falseloader4 = load_noisedD1(seed,root,binary)
+    _, train_loader, test_loader, _ = load_D1(seed, root, binary=binary)
+    false_loaders = [
+        createSklearnDataloader(load_wine(),          OOD_FEATURE_IDXS),
+        createSklearnDataloader(load_iris(),          OOD_FEATURE_IDXS),
+        createSklearnDataloader(load_breast_cancer(), OOD_FEATURE_IDXS),
+        load_noisedD1(seed, root, binary),
+    ]
+    return train_loader, test_loader, *false_loaders
 
-    return ambTrainLoader,ambTestLoader,falseloader,falseloader2,falseloader3,falseloader4

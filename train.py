@@ -1,139 +1,116 @@
 import torch
-
-from torch.functional import F
+import torch.nn.functional as F
 from tqdm import tqdm
+
 from utils.functions import gradPenalty2sideCalc
 from utils.oodEvaluation import get_auroc_ood
-from visualize import plot_results
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def networkTrainStep(netType, model,optimizer,lossFunction,trainLoader,numClasses,gradPenaltyL):
+
+def networkTrainStep(net_type, model, optimizer, loss_fn, train_loader, num_classes, grad_penalty_l):
     model.train()
-    totalLoss  = 0
-    correct    = 0
-    for x,y in trainLoader:
+    total_loss, correct = 0, 0
+
+    for x, y in train_loader:
         x = x.to(device)
         y = y.type(torch.LongTensor).to(device).squeeze()
-        if gradPenaltyL:
+        if grad_penalty_l:
             x.requires_grad_(True)
+
         optimizer.zero_grad()
         output = model(x)
-        loss = lossFunction(output,y)
-        if gradPenaltyL:
-            loss += gradPenaltyL * gradPenalty2sideCalc(x,output)
+        loss = loss_fn(output, y)
+        if grad_penalty_l:
+            loss = loss + grad_penalty_l * gradPenalty2sideCalc(x, output)
         loss.backward()
-        correct += (torch.argmax(output,dim=1) == y).sum().item()
-        totalLoss += loss.item()
+
+        correct   += (torch.argmax(output, dim=1) == y).sum().item()
+        total_loss += loss.item()
         optimizer.step()
 
-        if 'duq' in netType.lower():
+        if 'duq' in net_type.lower():
             with torch.no_grad():
-                y = F.one_hot(y,num_classes=numClasses).type(torch.float)
-                model.update_embeddings(x,y)
-    totalLoss /= len(trainLoader)
-    accuracy = correct / len(trainLoader.dataset)
-    return accuracy, totalLoss
+                model.update_embeddings(x, F.one_hot(y, num_classes=num_classes).float())
 
-def networkTest(model,lossFunction,testLoader):
+    return correct / len(train_loader.dataset), total_loss / len(train_loader)
+
+
+def networkTest(model, loss_fn, test_loader):
     model.eval()
-    valLoss = 0
-    valAccuracy = 0
+    total_loss, total_acc = 0, 0
+
     with torch.no_grad():
-        for x, y in testLoader:
-            x = x.to(device)
-            y = y.to(device)
+        for x, y in test_loader:
+            x, y = x.to(device), y.to(device)
             output = model(x)
-            valLoss += lossFunction(output, y).item()
-            valAccuracy += (output.argmax(dim=1) == y).float().mean().item()
-    valLoss /= len(testLoader)
-    valAccuracy /= len(testLoader)
-    return valAccuracy, valLoss
+            total_loss += loss_fn(output, y).item()
+            total_acc  += (output.argmax(dim=1) == y).float().mean().item()
 
-def networkTrain(netType,model,optimizer,scheduler,lossFunction,trainLoader,testLoader,falseLoaders,numClasses,gradPenaltyL,epochs):
-    trainAccs   = []
-    testAccs    = []
-    trainLosses = []
-    testLosses  = []
-    aurocs      = []
+    return total_acc / len(test_loader), total_loss / len(test_loader)
 
-    pbar = tqdm(range(epochs),desc="Epochs")
-    
+
+def networkTrain(net_type, model, optimizer, scheduler, loss_fn,
+                 train_loader, test_loader, false_loaders, num_classes, grad_penalty_l, epochs):
+    train_accs, train_losses, test_accs, test_losses, aurocs = [], [], [], [], []
+
+    pbar = tqdm(range(epochs), desc="Epochs")
     for _ in pbar:
-        trainAcc,trainLoss = networkTrainStep(netType,model,optimizer,lossFunction,trainLoader,numClasses,gradPenaltyL)
-        testAcc,testLoss = networkTest(model,lossFunction,testLoader)
-        currentAurocs = [] 
-        for falseloader in falseLoaders:
-            currentAurocs.append(get_auroc_ood(true_dataset=testLoader.dataset, ood_dataset=falseloader.dataset, model=model, device=device, model_type=netType))
-        aurocs.append(currentAurocs)
+        train_acc,  train_loss  = networkTrainStep(net_type, model, optimizer, loss_fn, train_loader, num_classes, grad_penalty_l)
+        test_acc,   test_loss   = networkTest(model, loss_fn, test_loader)
+        current_aurocs = [
+            get_auroc_ood(test_loader.dataset, fl.dataset, model, device, net_type)
+            for fl in false_loaders
+        ]
+
+        scheduler.step(test_loss)
+        train_accs.append(train_acc);   train_losses.append(train_loss)
+        test_accs.append(test_acc);     test_losses.append(test_loss)
+        aurocs.append(current_aurocs)
+
+        pbar.set_postfix({'test_acc': f'{test_acc:.2f}', 'AUROC1': f'{current_aurocs[0]:.2f}'})
+
+    return train_accs[-1], train_losses[-1], test_accs[-1], test_losses[-1], aurocs[-1]
 
 
-        scheduler.step(testLoss)
-        trainAccs.append(trainAcc)
-        trainLosses.append(trainLoss)
-        testAccs.append(testAcc)
-        testLosses.append(testLoss)
+def DeepEnsambleTest(models, loss_fn, loader):
+    for m in models:
+        m.eval()
 
-        pbar.set_postfix({'test_acc': f'{testAcc:.2f}%', 'AUROC1': f'{currentAurocs[0]:.2f}'})
-
-
-    ###############
-    plot_results(trainAccs, trainLosses, testAccs, testLosses, aurocs)
-    ###############
-    return trainAccs[-1],trainLosses[-1],testAccs[-1],testLosses[-1],aurocs[-1]
-
-def DeepEnsambleTest(models, lossFunction, testLoader):
-    for model in models:
-        model.eval()
-    preds = []
-    totallabels = []
+    preds, all_labels = [], []
     with torch.no_grad():
-        for x, y in testLoader:
-            batchprobs = []
-            for model in models:
-                output = model(x.to(device))
-                batchprobs.append(output)
+        for x, y in loader:
+            outputs = torch.stack([m(x.to(device)) for m in models]).mean(dim=0)
+            preds.append(torch.argmax(outputs, dim=1))
+            all_labels.append(y)
 
-            avg_probs = torch.stack(batchprobs).mean(dim=0)  
-            preds.append(torch.argmax(avg_probs, dim=1))
-            totallabels.append(y)
-    preds = torch.cat(preds)
-    totallabels= torch.cat(totallabels)
-    valLoss = lossFunction(avg_probs, y.to(device)).item()
-    valAccuracy = ((preds == totallabels.to(device)).float().mean().item())
-    return valAccuracy,valLoss
-
-def DeepEnsambleTrain(models,optimizers,schedulers,lossFunction,trainLoader,
-                      testLoader,falseLoaders,numClasses,gradPenaltyL,epochs):
-
-    demodelsNum = len(models)
-    trainAccs   = []
-    testAccs    = []
-    trainLosses = []
-    testLosses  = []
-    aurocs      = []
-
-    pbar = tqdm(range(epochs),desc="Epochs")
-    
-    for _ in pbar:
-        for i in range(demodelsNum):
-            trainAcc,trainLoss = networkTrainStep('mlp',models[i],optimizers[i],lossFunction,trainLoader,numClasses,gradPenaltyL)
-            _, testLoss = networkTest(models[i],lossFunction,testLoader) 
-            schedulers[i].step(testLoss)
-        currentAurocs = [] 
-        for falseloader in falseLoaders:
-            currentAurocs.append(get_auroc_ood(true_dataset=testLoader.dataset, ood_dataset=falseloader.dataset, model=models,
-                                                device=device, model_type='de'))
-        aurocs.append(currentAurocs)
-        trainAcc,trainLoss = DeepEnsambleTest(models,lossFunction,trainLoader)
-        testAcc,testLoss = DeepEnsambleTest(models,lossFunction,testLoader)
+    preds      = torch.cat(preds)
+    all_labels = torch.cat(all_labels)
+    loss       = loss_fn(outputs, y.to(device)).item()
+    accuracy   = (preds == all_labels.to(device)).float().mean().item()
+    return accuracy, loss
 
 
-        trainAccs.append(trainAcc)
-        trainLosses.append(trainLoss)
-        testAccs.append(testAcc)
-        testLosses.append(testLoss)
+def DeepEnsambleTrain(models, optimizers, schedulers, loss_fn,
+                      train_loader, test_loader, false_loaders, num_classes, grad_penalty_l, epochs):
+    train_accs, train_losses, test_accs, test_losses, aurocs = [], [], [], [], []
 
-        pbar.set_postfix({'test_acc': f'{testAcc:.2f}%', 'AUROC1': f'{currentAurocs[0]:.2f}'})
+    for _ in tqdm(range(epochs), desc="Epochs"):
+        for model, optimizer, scheduler in zip(models, optimizers, schedulers):
+            _, test_loss = networkTest(model, loss_fn, test_loader)
+            networkTrainStep('mlp', model, optimizer, loss_fn, train_loader, num_classes, grad_penalty_l)
+            scheduler.step(test_loss)
 
-    return trainAccs[-1],trainLosses[-1],testAccs[-1],testLosses[-1],aurocs[-1]
+        current_aurocs = [
+            get_auroc_ood(test_loader.dataset, fl.dataset, models, device, 'de')
+            for fl in false_loaders
+        ]
+
+        train_acc, train_loss = DeepEnsambleTest(models, loss_fn, train_loader)
+        test_acc,  test_loss  = DeepEnsambleTest(models, loss_fn, test_loader)
+
+        train_accs.append(train_acc);   train_losses.append(train_loss)
+        test_accs.append(test_acc);     test_losses.append(test_loss)
+        aurocs.append(current_aurocs)
+
+    return train_accs[-1], train_losses[-1], test_accs[-1], test_losses[-1], aurocs[-1]
