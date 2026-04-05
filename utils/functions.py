@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from fvcore.nn import FlopCountAnalysis
+from fvcore.nn.jit_handles import elementwise_flop_counter
+
+
 import time
 
 class ActivationFunctions(nn.Module):
@@ -56,16 +60,42 @@ class ProposedLoss(nn.Module):
         return LogitNormLoss(self.tau,self.eps).forward(logits,targets) * (1-self.lamda) + self.lamda*F.cross_entropy(logits,targets)
 
 
-
 def model_stats(model, input_size: tuple, device, n_warmup: int = 50, n_runs: int = 500):
-    # param count flops inference etc
     model.eval()
     dummy = torch.zeros(1, *input_size).to(device)
 
-    # Parameter count
-    total_params     = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-    # Inference time — warm up then average
+    # register elementwise ops to count them on FLOP
+    flops = FlopCountAnalysis(model, dummy)
+    flops.set_op_handle(**{
+        "aten::silu":       elementwise_flop_counter(1, 0),
+        "aten::softmax":    elementwise_flop_counter(1, 0),
+        "aten::lt":         elementwise_flop_counter(1, 0),
+        "aten::nan_to_num": elementwise_flop_counter(1, 0),
+        "aten::exp":        elementwise_flop_counter(1, 0),
+        "aten::pow":        elementwise_flop_counter(1, 0),
+        "aten::neg":        elementwise_flop_counter(1, 0),
+        "aten::mean":       elementwise_flop_counter(1, 0),
+        "aten::sqrt":       elementwise_flop_counter(1, 0),
+        "aten::sigmoid":       elementwise_flop_counter(1, 0),
+        "prim::PythonOp.SparsemaxFunctionaten::":       elementwise_flop_counter(1, 0),
+        "aten::square":     elementwise_flop_counter(1, 0),
+        "aten::mul":        elementwise_flop_counter(1, 0),
+        "aten::sum":        elementwise_flop_counter(1, 0),
+        "aten::log":        elementwise_flop_counter(1, 0),
+        "aten::sub":        elementwise_flop_counter(1, 0),
+        "aten::rsub":       elementwise_flop_counter(1, 0),
+        "aten::sub_":       elementwise_flop_counter(1, 0),
+        "aten::div":        elementwise_flop_counter(1, 0),
+        "aten::div_":       elementwise_flop_counter(1, 0),
+        "aten::add":        elementwise_flop_counter(1, 0),
+        "aten::add_":       elementwise_flop_counter(1, 0),
+        "aten::layer_norm": elementwise_flop_counter(1, 0),
+    })
+    flops.unsupported_ops_warnings(True)
+    total_flops = flops.total()
+
     with torch.no_grad():
         for _ in range(n_warmup):
             model(dummy)
@@ -76,7 +106,10 @@ def model_stats(model, input_size: tuple, device, n_warmup: int = 50, n_runs: in
             model(dummy)
         if device.type == 'cuda':
             torch.cuda.synchronize()
-        ms_per_sample = (time.perf_counter() - t0) / n_runs * 1000
+        ms = (time.perf_counter() - t0) / n_runs * 1000
 
-    print(f"  Params (total):     {total_params:,}")
-    print(f"  Inference time:     {ms_per_sample:.4f} ms/sample")
+    print(f"  Params (trainable): {trainable_params:,}")
+    print(f"  FLOPs:              {total_flops:,}")
+    print(f"  Inference time:     {ms:.4f} ms/sample")
+
+    return {'params': trainable_params, 'flops': total_flops, 'ms': ms}

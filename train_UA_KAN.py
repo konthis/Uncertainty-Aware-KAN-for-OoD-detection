@@ -22,7 +22,7 @@ def main(architecture, grids, learning_rate, learning_rate_denominator, denomina
     trainAccs, trainLosses, testAccs, testLosses, aurocs = [], [], [], [], []
 
     for _ in range(model_num):
-        model = ProposedKAN(architecture, num_grids=grids, base_activation=baseActivation, denominator=denominator).cuda()
+        model = UA_KAN(architecture, num_grids=grids, base_activation=baseActivation, denominator=denominator).cuda()
         denom_params  = [p for name, p in model.named_parameters() if 'denominator' in name]
         other_params  = [p for name, p in model.named_parameters() if 'denominator' not in name]
         optimizer = torch.optim.SGD(
