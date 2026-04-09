@@ -9,11 +9,11 @@ from models.KANmodel import *
 from train import *
 
 
-def main(architecture, grids, learning_rate, epochs, gamma, weight_decay, model_num):
+def main(architecture, grids, learning_rate, epochs, gamma, weight_decay, model_num, dataset):
     architecture = list(map(int, architecture))
     numClasses = architecture[-1]
 
-    trainLoader, testLoader, *falseloaders = loadAllDataloaders('./datasets', numClasses == 2)
+    trainLoader, testLoader, *falseloaders = loadAllDataloaders('./datasets', numClasses == 2, dataset=dataset)
     lossFunction = nn.CrossEntropyLoss()
 
     trainAccs, trainLosses, testAccs, testLosses, aurocs = [], [], [], [], []
@@ -49,4 +49,5 @@ if __name__ == "__main__":
     parser.add_argument('--gamma',         type=float, default=0.9)
     parser.add_argument('--weight_decay',  type=float, default=1e-4)
     parser.add_argument('--model_num',     type=int,   default=5)
+    parser.add_argument('--dataset', type=str, default='ambrosia', choices=['ambrosia', 'heart'])
     main(**vars(parser.parse_args()))

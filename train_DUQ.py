@@ -9,12 +9,13 @@ from models.DUQmodel import *
 from train import *
 
 
-def main(architecture, learning_rate, epochs, l_gradient_penalty, length_scale, model_num):
+def main(architecture, learning_rate, epochs, l_gradient_penalty, length_scale, model_num, dataset):
     architecture = list(map(int, architecture))
     numClasses = architecture[-1]
     centroid_size = architecture[-2]
 
-    trainLoader, testLoader, *falseloaders = loadAllDataloaders('./datasets', numClasses == 2)
+    trainLoader, testLoader, *falseloaders = loadAllDataloaders('./datasets', numClasses == 2, dataset=dataset)
+
     lossFunction = nn.CrossEntropyLoss()
 
     trainAccs, trainLosses, testAccs, testLosses, aurocs = [], [], [], [], []
@@ -47,4 +48,5 @@ if __name__ == "__main__":
     parser.add_argument('--l_gradient_penalty', type=float, default=0.25)
     parser.add_argument('--length_scale',       type=float, default=1.0)
     parser.add_argument('--model_num',          type=int,   default=5)
+    parser.add_argument('--dataset', type=str, default='ambrosia', choices=['ambrosia', 'heart'])
     main(**vars(parser.parse_args()))

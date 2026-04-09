@@ -1,4 +1,5 @@
 import pandas as pd
+import os
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -61,6 +62,53 @@ def load_D1(seed,path='../datasets', only_biomarkers=True, binary=False):
     dimensions = X_train.shape[1]
     return test_dataset, train_loader, test_loader, dimensions
 
+def download_heart_disease(path='../datasets'):
+    dest = os.path.join(path, 'heart_cleveland_upload.csv')
+    if os.path.exists(dest):
+        return
+    try:
+        import kagglehub, shutil
+    except ImportError:
+        raise ImportError("Please: pip install kagglehub")
+
+    print("Downloading Heart Disease Cleveland...")
+    cache_path = kagglehub.dataset_download("cherngs/heart-disease-cleveland-uci")
+    src = os.path.join(cache_path, 'heart_cleveland_upload.csv')
+    shutil.move(src, dest)
+    print(f"Moved to {dest}")
+
+def load_heart_disease(seed, path='../datasets'):
+    download_heart_disease(path)
+    df = pd.read_csv(os.path.join(path, 'heart_cleveland_upload.csv'))
+
+    df.dropna(inplace=True)
+
+    X = df.drop(columns=['condition'])
+    y = df['condition']
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.3, random_state=seed
+    )
+
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test  = scaler.transform(X_test)
+
+    train_dataset = TensorDataset(
+        torch.tensor(X_train, dtype=torch.float32),
+        torch.tensor(y_train.values, dtype=torch.long)
+    )
+    test_dataset = TensorDataset(
+        torch.tensor(X_test, dtype=torch.float32),
+        torch.tensor(y_test.values, dtype=torch.long)
+    )
+
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False)
+
+    return test_dataset, train_loader, test_loader, X_train.shape[1]
+
+
 def createSklearnDataloader(dataset, feature_idxs: list) -> DataLoader:
     X = dataset['data'][:, feature_idxs]
     X = StandardScaler().fit_transform(X)
@@ -99,4 +147,5 @@ def loadAllDataloaders(root: str = './datasets', binary: bool = False):
         load_noisedD1(seed, root, binary),
     ]
     return train_loader, test_loader, *false_loaders
+
 

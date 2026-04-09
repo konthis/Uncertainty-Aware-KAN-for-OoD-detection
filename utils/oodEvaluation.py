@@ -21,6 +21,16 @@ def _get_uncertainty_scores(model, dataloader, model_type: str, device: torch.de
                 kernel_distance, _ = output.max(1)
                 uncertainty = -kernel_distance
 
+            elif model_type.lower() == 'ua_kan':
+                _, layer_us = model.forward_with_layer_uncertainty(data)
+                uncertainty = sum(w * u for w, u in zip(model.layer_weights, layer_us))
+            # elif model_type.lower() == 'ua_kan':
+            #     logits, layer_us = model.forward_with_layer_uncertainty(data)
+            #     probs = F.softmax(logits, dim=1)
+            #     output_entropy = torch.sum(probs * torch.log(probs + 1e-10), dim=1)
+            #     layer_cert = sum(w * u for w, u in zip(model.layer_weights, layer_us))
+            #     uncertainty = output_entropy + layer_cert
+
             elif model_type.lower() == 'kan':
                 output = model.forwardSoftmax(data)
                 uncertainty = torch.sum(output * torch.log(output + 1e-10), dim=1)

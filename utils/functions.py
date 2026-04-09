@@ -79,7 +79,6 @@ def model_stats(model, input_size: tuple, device, n_warmup: int = 50, n_runs: in
         "aten::mean":       elementwise_flop_counter(1, 0),
         "aten::sqrt":       elementwise_flop_counter(1, 0),
         "aten::sigmoid":       elementwise_flop_counter(1, 0),
-        "prim::PythonOp.SparsemaxFunctionaten::":       elementwise_flop_counter(1, 0),
         "aten::square":     elementwise_flop_counter(1, 0),
         "aten::mul":        elementwise_flop_counter(1, 0),
         "aten::sum":        elementwise_flop_counter(1, 0),
@@ -92,6 +91,8 @@ def model_stats(model, input_size: tuple, device, n_warmup: int = 50, n_runs: in
         "aten::add":        elementwise_flop_counter(1, 0),
         "aten::add_":       elementwise_flop_counter(1, 0),
         "aten::layer_norm": elementwise_flop_counter(1, 0),
+        "prim::PythonOp.SparsemaxFunction": elementwise_flop_counter(1, 0),
+        "prim::PythonOp.SparsemaxFunctionaten::":       elementwise_flop_counter(1, 0),
     })
     flops.unsupported_ops_warnings(True)
     total_flops = flops.total()

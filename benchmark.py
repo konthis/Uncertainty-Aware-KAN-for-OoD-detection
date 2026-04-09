@@ -55,3 +55,15 @@ clf = TabPFNClassifier()
 clf.fit(X_train, y_train)
 params = sum(p.numel() for p in clf.model_.parameters())
 print(f"  Params: {params:,}")
+
+import time
+n_warmup, n_runs = 5, 20
+X_test_dummy = X_train[:1]  # single sample
+for _ in range(n_warmup):
+    clf.predict(X_test_dummy)
+t0 = time.perf_counter()
+for _ in range(n_runs):
+    clf.predict(X_test_dummy)
+ms = (time.perf_counter() - t0) / n_runs * 1000
+print(f"  Inference time:     {ms:.4f} ms/sample")
+

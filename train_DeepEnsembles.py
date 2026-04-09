@@ -9,11 +9,11 @@ from models.MLPmodel import *
 from train import *
 
 
-def main(architecture, DE_num, learning_rate, epochs, model_num):
+def main(architecture, DE_num, learning_rate, epochs, model_num, dataset):
     architecture = list(map(int, architecture))
     numClasses = architecture[-1]
 
-    trainLoader, testLoader, *falseloaders = loadAllDataloaders('./datasets', numClasses == 2)
+    trainLoader, testLoader, *falseloaders = loadAllDataloaders('./datasets', numClasses == 2, dataset=dataset)
     lossFunction = nn.CrossEntropyLoss()
 
     trainAccs, trainLosses, testAccs, testLosses, aurocs = [], [], [], [], []
@@ -45,4 +45,6 @@ if __name__ == "__main__":
     parser.add_argument('--learning_rate', type=float, default=0.1)
     parser.add_argument('--epochs',        type=int,   default=50)
     parser.add_argument('--model_num',     type=int,   default=5)
+    parser.add_argument('--dataset', type=str, default='ambrosia', choices=['ambrosia', 'heart'])
+
     main(**vars(parser.parse_args()))

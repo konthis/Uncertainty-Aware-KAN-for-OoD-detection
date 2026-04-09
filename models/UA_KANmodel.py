@@ -70,6 +70,20 @@ class UA_KANLayer(nn.Module):
             ret = ret + base
         return ret
 
+    def layer_uncertainty(self, x):
+        if self.layernorm:
+            spline_basis = self.rbf(self.layernorm(x))
+        else:
+            spline_basis = self.rbf(x)
+        ret = self.spline_linear(spline_basis.view(*spline_basis.shape[:-2], -1))
+        sret = F.softmax(ret,dim=1)
+        uncertainty = torch.sum(sret* torch.log(sret + 1e-10), dim=1)
+        return uncertainty
+
+
+
+
+
     def plot_curve(
         self,
         input_index: int,
@@ -77,13 +91,6 @@ class UA_KANLayer(nn.Module):
         num_pts: int = 1000,
         num_extrapolate_bins: int = 2
     ):
-        '''this function returns the learned curves in a FastKANLayer.
-        input_index: the selected index of the input, in [0, input_dim) .
-        output_index: the selected index of the output, in [0, output_dim) .
-        num_pts: num of points sampled for the curve.
-        num_extrapolate_bins (N_e): num of bins extrapolating from the given grids. The curve 
-            will be calculate in the range of [grid_min - h * N_e, grid_max + h * N_e].
-        '''
         ng = self.rbf.num_grids
         h = self.rbf.denominator
         assert input_index < self.input_dim
@@ -125,6 +132,33 @@ class UA_KAN(nn.Module):
                 spline_weight_init_scale=spline_weight_init_scale,
             ) for in_dim, out_dim in zip(layers_hidden[:-1], layers_hidden[1:])
         ])
+        ####  weights for uncertainty calculation
+        self.layer_weights = [1.0 / len(self.layers)] * len(self.layers)  # uniform init
+
+    
+    def forward_with_layer_uncertainty(self, x):
+        # Returns (logits, [u_layer1, u_layer2, ..., u_layerN])
+        uncertainties = []
+        for layer in self.layers:
+            uncertainties.append(layer.layer_uncertainty(x))
+            x = layer(x)
+        return x, uncertainties
+
+    def compute_layer_weights(self, train_loader, device):
+        # calculate variances of each layers uncertainty score, and normalize them
+        self.eval()
+        collected = [[] for _ in self.layers]
+        with torch.no_grad():
+            for x, _ in train_loader:
+                x = x.to(device)
+                _, layer_us = self.forward_with_layer_uncertainty(x)
+                for i, u in enumerate(layer_us):
+                    collected[i].append(u.cpu())
+        variances = [torch.cat(collected[i]).var().item() for i in range(len(self.layers))]
+        total = sum(variances) + 1e-10
+        self.layer_weights = [v / total for v in variances]
+        return self.layer_weights
+
 
     def forward(self, x):
         for layer in self.layers:
@@ -135,3 +169,4 @@ class UA_KAN(nn.Module):
         for layer in self.layers:
             x = layer(x)
         return F.softmax(x,dim=1)
+    

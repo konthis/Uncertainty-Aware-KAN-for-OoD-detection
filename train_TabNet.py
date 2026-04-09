@@ -26,7 +26,7 @@ def compute_auroc(clf, X_in, X_ood):
     return roc_auc_score(labels, scores)
 
 
-def main(model_num, num_classes, epochs):
+def main(model_num, num_classes, epochs, dataset):
     from pytorch_tabnet.tab_model import TabNetClassifier
 
     binary = (num_classes == 2)
@@ -77,5 +77,6 @@ if __name__ == "__main__":
     parser.add_argument("--model_num",   type=int, default=5)
     parser.add_argument("--num_classes", type=int, default=3)
     parser.add_argument("--epochs",      type=int, default=200)
+    parser.add_argument('--dataset', type=str, default='ambrosia', choices=['ambrosia', 'heart'])
     args = parser.parse_args()
     main(args.model_num, args.num_classes, args.epochs)
