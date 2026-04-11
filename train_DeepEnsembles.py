@@ -9,6 +9,7 @@ from models.MLPmodel import *
 from train import *
 
 
+
 def main(architecture, DE_num, learning_rate, epochs, model_num, dataset):
     architecture = list(map(int, architecture))
     numClasses = architecture[-1]
@@ -36,6 +37,11 @@ def main(architecture, DE_num, learning_rate, epochs, model_num, dataset):
     aurocs_mean, aurocs_std = np.mean(aurocs, axis=0), np.std(aurocs, axis=0)
     for i, (m, s) in enumerate(zip(aurocs_mean, aurocs_std)):
         print(f"AUROC {i+1}: {m:.3f} std {s:.3f}")
+
+    from utils.save_results import save_results
+    save_results('DeepEnsembles', dataset,
+             {'architecture': architecture, 'learning_rate': learning_rate, 'epochs': epochs, 'model_num': model_num},
+             trainAccs, trainLosses, testAccs, testLosses, aurocs)
 
 
 if __name__ == "__main__":

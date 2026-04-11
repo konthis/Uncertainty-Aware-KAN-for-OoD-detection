@@ -10,7 +10,6 @@ from torch.utils.data import Dataset
 from sklearn.datasets import load_iris,load_breast_cancer,load_wine
 
 BATCH_SIZE = 16
-OOD_FEATURE_IDXS = [0, 1, 2]
 
 # 0: Non-infectious SIRS
 # 1: Sepsis
@@ -63,44 +62,56 @@ def load_D1(seed,path='../datasets', only_biomarkers=True, binary=False):
     return test_dataset, train_loader, test_loader, dimensions
 
 def download_heart_disease(path='../datasets'):
-    dest = os.path.join(path, 'heart_cleveland_upload.csv')
+    dest = os.path.join(path, 'heart_disease_uci.csv')
     if os.path.exists(dest):
         return
     try:
         import kagglehub, shutil
     except ImportError:
         raise ImportError("Please: pip install kagglehub")
-
-    print("Downloading Heart Disease Cleveland...")
-    cache_path = kagglehub.dataset_download("cherngs/heart-disease-cleveland-uci")
-    src = os.path.join(cache_path, 'heart_cleveland_upload.csv')
+    print("Downloading Heart Disease UCI...")
+    cache_path = kagglehub.dataset_download("redwankarimsony/heart-disease-data")
+    src = os.path.join(cache_path, 'heart_disease_uci.csv')
     shutil.move(src, dest)
     print(f"Moved to {dest}")
 
+
 def load_heart_disease(seed, path='../datasets'):
     download_heart_disease(path)
-    df = pd.read_csv(os.path.join(path, 'heart_cleveland_upload.csv'))
+    df = pd.read_csv(os.path.join(path, 'heart_disease_uci.csv'))
 
-    df.dropna(inplace=True)
+    # drop identifier/source columns
+    df = df.drop(columns=['id', 'dataset'], errors='ignore')
 
-    X = df.drop(columns=['condition'])
-    y = df['condition']
+    df = df.rename(columns={'num': 'target'})
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.3, random_state=seed
-    )
+    df = df.dropna()
 
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test  = scaler.transform(X_test)
+    # encode string categoricals as integers (ordinal/label encoding)
+    for col in ['sex', 'cp', 'thal', 'restecg', 'slope']:
+        if col in df.columns and df[col].dtype == object:
+            df[col] = LabelEncoder().fit_transform(df[col])
+
+    for col in df.select_dtypes(include=['bool']).columns:
+        df[col] = df[col].astype(int)
+
+    X = df.drop(columns=['target'])
+    y = df['target']
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=seed)
+
+    for col in X_train.columns:
+        scaler = StandardScaler()
+        X_train[col] = scaler.fit_transform(X_train[[col]])
+        X_test[col]  = scaler.transform(X_test[[col]])
 
     train_dataset = TensorDataset(
-        torch.tensor(X_train, dtype=torch.float32),
-        torch.tensor(y_train.values, dtype=torch.long)
+        torch.tensor(X_train.values.copy(), dtype=torch.float32),
+        torch.tensor(y_train.values.copy(), dtype=torch.long)
     )
     test_dataset = TensorDataset(
-        torch.tensor(X_test, dtype=torch.float32),
-        torch.tensor(y_test.values, dtype=torch.long)
+        torch.tensor(X_test.values.copy(), dtype=torch.float32),
+        torch.tensor(y_test.values.copy(), dtype=torch.long)
     )
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
@@ -109,12 +120,19 @@ def load_heart_disease(seed, path='../datasets'):
     return test_dataset, train_loader, test_loader, X_train.shape[1]
 
 
-def createSklearnDataloader(dataset, feature_idxs: list) -> DataLoader:
-    X = dataset['data'][:, feature_idxs]
+def createSklearnDataloader(dataset, n_features: int) -> DataLoader:
+    import numpy as np
+    X = dataset['data']
+    n_avail = X.shape[1]
+    if n_avail >= n_features:
+        X = X[:, :n_features]
+    else:
+        X = np.hstack([X, np.zeros((X.shape[0], n_features - n_avail))])
     X = StandardScaler().fit_transform(X)
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(dataset['target'], dtype=torch.long)
     return DataLoader(TensorDataset(X_tensor, y_tensor), batch_size=1000, shuffle=True)
+
 
 class GaussianNoisedDataset(Dataset):
     def __init__(self, dataset, mean=3.0, std=5):
@@ -131,21 +149,23 @@ class GaussianNoisedDataset(Dataset):
         noisy_data = torch.clamp(noisy_data, data.min(), data.max()) # keep range
         return noisy_data, target
 
-def load_noisedD1(seed: int, root: str, binary: bool) -> DataLoader:
-    _, train_loader, _, _ = load_D1(seed, root, binary=binary)
-    noised = GaussianNoisedDataset(train_loader.dataset)
-    return DataLoader(noised, batch_size=BATCH_SIZE, shuffle=True)
-
-
-def loadAllDataloaders(root: str = './datasets', binary: bool = False):
+def loadAllDataloaders(root: str = './datasets', binary: bool = False, dataset='ambrosia'):
     seed = 1
-    _, train_loader, test_loader, _ = load_D1(seed, root, binary=binary)
+    if dataset == 'ambrosia':
+        _, train_loader, test_loader, dimensions = load_D1(seed, root, binary=binary)
+    elif dataset == 'heart':
+        _, train_loader, test_loader, dimensions = load_heart_disease(seed, root)
+
+    noised = GaussianNoisedDataset(train_loader.dataset)
+    noised_loader = DataLoader(noised, batch_size=BATCH_SIZE, shuffle=True)
+
     false_loaders = [
-        createSklearnDataloader(load_wine(),          OOD_FEATURE_IDXS),
-        createSklearnDataloader(load_iris(),          OOD_FEATURE_IDXS),
-        createSklearnDataloader(load_breast_cancer(), OOD_FEATURE_IDXS),
-        load_noisedD1(seed, root, binary),
+        createSklearnDataloader(load_wine(),          dimensions),
+        createSklearnDataloader(load_iris(),          dimensions),
+        createSklearnDataloader(load_breast_cancer(), dimensions),
+        noised_loader,
     ]
     return train_loader, test_loader, *false_loaders
+
 
 

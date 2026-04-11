@@ -78,7 +78,7 @@ def model_stats(model, input_size: tuple, device, n_warmup: int = 50, n_runs: in
         "aten::neg":        elementwise_flop_counter(1, 0),
         "aten::mean":       elementwise_flop_counter(1, 0),
         "aten::sqrt":       elementwise_flop_counter(1, 0),
-        "aten::sigmoid":       elementwise_flop_counter(1, 0),
+        "aten::sigmoid":    elementwise_flop_counter(1, 0),
         "aten::square":     elementwise_flop_counter(1, 0),
         "aten::mul":        elementwise_flop_counter(1, 0),
         "aten::sum":        elementwise_flop_counter(1, 0),
@@ -114,3 +114,18 @@ def model_stats(model, input_size: tuple, device, n_warmup: int = 50, n_runs: in
     print(f"  Inference time:     {ms:.4f} ms/sample")
 
     return {'params': trainable_params, 'flops': total_flops, 'ms': ms}
+
+def xgboost_flops(clf):
+    df = clf.get_booster().trees_to_dataframe()
+
+    # compute depth from node ID: "Tree-Node" e.g. "0-3"
+    df['node_idx'] = df['ID'].apply(lambda x: int(x.split('-')[1]))
+    # depth of node i in a binary tree: floor(log2(i+1))
+    import math
+    df['depth'] = df['node_idx'].apply(lambda i: math.floor(math.log2(i + 1)))
+
+    leaves = df[df['Feature'] == 'Leaf'][['Tree', 'depth']]
+    avg_path_length = leaves.groupby('Tree')['depth'].mean().mean()
+    n_trees = df['Tree'].nunique()
+
+    return int(n_trees * avg_path_length * 2)

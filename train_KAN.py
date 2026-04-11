@@ -38,6 +38,12 @@ def main(architecture, grids, learning_rate, epochs, gamma, weight_decay, model_
     aurocs_mean, aurocs_std = np.mean(aurocs, axis=0), np.std(aurocs, axis=0)
     for i, (m, s) in enumerate(zip(aurocs_mean, aurocs_std)):
         print(f"AUROC {i+1}: {m:.3f} std {s:.3f}")
+    
+    from utils.save_results import save_results
+    save_results('KAN', dataset,
+             {'architecture': architecture, 'learning_rate': learning_rate, 'epochs': epochs, 'model_num': model_num},
+             trainAccs, trainLosses, testAccs, testLosses, aurocs)
+
 
 
 if __name__ == "__main__":

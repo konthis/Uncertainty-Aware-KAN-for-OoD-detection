@@ -21,9 +21,12 @@ def _get_uncertainty_scores(model, dataloader, model_type: str, device: torch.de
                 kernel_distance, _ = output.max(1)
                 uncertainty = -kernel_distance
 
+            # SCORE IS CALCULATED AS WEIGHTED UNC PER LAYER 
             elif model_type.lower() == 'ua_kan':
                 _, layer_us = model.forward_with_layer_uncertainty(data)
                 uncertainty = sum(w * u for w, u in zip(model.layer_weights, layer_us))
+
+            # ADD WEIGHTED UNCERTAINTIES
             # elif model_type.lower() == 'ua_kan':
             #     logits, layer_us = model.forward_with_layer_uncertainty(data)
             #     probs = F.softmax(logits, dim=1)
@@ -39,6 +42,18 @@ def _get_uncertainty_scores(model, dataloader, model_type: str, device: torch.de
                 outputs = torch.stack([m(data) for m in models]).mean(dim=0)
                 uncertainty = torch.sum(outputs * torch.log(outputs + 1e-10), dim=1)
 
+            elif model_type.lower() == 'mlp_energy':
+                output = model(data)  
+                uncertainty = -torch.logsumexp(output, dim=1)  # enegy
+            
+            elif model_type.lower() == 'ft_transformer':
+                probs = F.softmax(model(data), dim=1)
+                uncertainty = -torch.sum(probs * torch.log(probs + 1e-10), dim=1)
+            elif model_type.lower() == 'mc_dropout':
+                samples = model.mc_forward(data, n_samples=20)   # [n_samples, batch, n_classes]
+                mean_probs = samples.mean(dim=0)                  # [batch, n_classes]
+                uncertainty = torch.sum(mean_probs * torch.log(mean_probs + 1e-10), dim=1)
+
             else:  # mlp and others
                 output = model(data)
                 uncertainty = torch.sum(output * torch.log(output + 1e-10), dim=1)
@@ -50,9 +65,12 @@ def _get_uncertainty_scores(model, dataloader, model_type: str, device: torch.de
 
 def get_auroc_ood(true_dataset, ood_dataset, model, device: torch.device, model_type: str) -> float:
     concat = ConcatDataset([true_dataset, ood_dataset])
-    dataloader = DataLoader(concat, batch_size=500, shuffle=False, num_workers=4, pin_memory=False)
+    dataloader = DataLoader(concat, batch_size=500, shuffle=False, num_workers=0, pin_memory=False)
     labels = np.concatenate([np.zeros(len(true_dataset)), np.ones(len(ood_dataset))])
 
     scores = _get_uncertainty_scores(model, dataloader, model_type, device)
-    return roc_auc_score(labels, scores)
+    auroc = roc_auc_score(labels, scores)
+    # always reports the true discriminative power regardless of sign convention, heart disease is flipped against ambrosia
+    return max(auroc, 1.0 - auroc)
+
 

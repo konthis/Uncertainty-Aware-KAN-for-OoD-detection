@@ -7,6 +7,10 @@
 *.docx
 *.npz
 *.pth
+.venv
+.claude
+# save_results.py
+run_all.py
 tools.py
 results
 __pycache__/

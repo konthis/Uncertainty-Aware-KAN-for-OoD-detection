@@ -4,9 +4,9 @@ import torch
 from torch import nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from datasets.load_datasets import *
-from models.MLPmodel import *
-from train import *
+from datasets.load_datasets import loadAllDataloaders
+from models.MLPmodel import SoftmaxModel
+from train import networkTrain
 
 
 def main(architecture, learning_rate, epochs, model_num, dataset):
@@ -14,21 +14,19 @@ def main(architecture, learning_rate, epochs, model_num, dataset):
     numClasses = architecture[-1]
 
     trainLoader, testLoader, *falseloaders = loadAllDataloaders('./datasets', numClasses == 2, dataset=dataset)
-
-    lossFunction = nn.CrossEntropyLoss()
+    lossFunction = nn.CrossEntropyLoss()  
 
     trainAccs, trainLosses, testAccs, testLosses, aurocs = [], [], [], [], []
 
     for _ in range(model_num):
         model = SoftmaxModel(architecture, activationFunction=nn.ReLU()).cuda()
-        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-        scheduler = ReduceLROnPlateau(optimizer, 'min', patience=5)
+        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+        scheduler = ReduceLROnPlateau(optimizer, 'min', patience=25)
 
         trainAcc, trainLoss, testAcc, testLoss, auroc = networkTrain(
-            'mlp', model, optimizer, scheduler,
+            'mlp_energy', model, optimizer, scheduler,
             lossFunction, trainLoader, testLoader, falseloaders, numClasses, None, epochs
         )
-        # i like this ; operator
         trainAccs.append(trainAcc); trainLosses.append(trainLoss)
         testAccs.append(testAcc);   testLosses.append(testLoss)
         aurocs.append(auroc)
@@ -40,16 +38,18 @@ def main(architecture, learning_rate, epochs, model_num, dataset):
         print(f"AUROC {i+1}: {m:.3f} std {s:.3f}")
 
     from utils.save_results import save_results
-    save_results('MLP', dataset,
+    save_results('EnergyMLP', dataset,
              {'architecture': architecture, 'learning_rate': learning_rate, 'epochs': epochs, 'model_num': model_num},
              trainAccs, trainLosses, testAccs, testLosses, aurocs)
 
 
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--architecture', nargs='+', type=int, default=[3, 32, 16, 3])
-    parser.add_argument('--learning_rate', type=float, default=0.1)
+    parser.add_argument('--architecture', nargs='+', type=int, default=[3, 32, 16, 2])
+    parser.add_argument('--learning_rate', type=float, default=0.001)
     parser.add_argument('--epochs',        type=int,   default=50)
     parser.add_argument('--model_num',     type=int,   default=5)
-    parser.add_argument('--dataset', type=str, default='ambrosia', choices=['ambrosia', 'heart'])
+    parser.add_argument('--dataset',       type=str,   default='ambrosia', choices=['ambrosia', 'heart'])
     main(**vars(parser.parse_args()))

@@ -14,7 +14,8 @@ def networkTrainStep(net_type, model, optimizer, loss_fn, train_loader, num_clas
 
     for x, y in train_loader:
         x = x.to(device)
-        y = y.type(torch.LongTensor).to(device).squeeze()
+        #y = y.type(torch.LongTensor).to(device).squeeze()
+        y = y.type(torch.LongTensor).to(device).view(-1)
         if grad_penalty_l:
             x.requires_grad_(True)
 

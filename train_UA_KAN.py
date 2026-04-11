@@ -12,12 +12,12 @@ from train import *
 
 def main(architecture, grids, learning_rate, learning_rate_denominator, denominator,
          loss_lamda, loss_tau, loss, use_base_update, epochs, gamma, activation_gamma,
-         weight_decay, model_num):
+         weight_decay, model_num, dataset):
 
     architecture = list(map(int, architecture))
     numClasses = architecture[-1]
 
-    trainLoader, testLoader, *falseloaders = loadAllDataloaders('./datasets', numClasses == 2)
+    trainLoader, testLoader, *falseloaders = loadAllDataloaders('./datasets', numClasses == 2, dataset=dataset)
     if loss == 'proposed':
         lossFunction = ProposedLoss(lamda=loss_lamda, tau=loss_tau)
     else:
@@ -57,7 +57,6 @@ def main(architecture, grids, learning_rate, learning_rate_denominator, denomina
         ])
 
 
-
     print(f"TrainAcc: {np.mean(trainAccs):.3f} std {np.std(trainAccs):.3f},  TrainLoss: {np.mean(trainLosses):.3f} std {np.std(trainLosses):.3f}")
     print(f"TestAcc:  {np.mean(testAccs):.3f} std {np.std(testAccs):.3f},  TestLoss:  {np.mean(testLosses):.3f} std {np.std(testLosses):.3f}")
     aurocs_mean, aurocs_std = np.mean(aurocs, axis=0), np.std(aurocs, axis=0)
@@ -67,6 +66,13 @@ def main(architecture, grids, learning_rate, learning_rate_denominator, denomina
     weighted_aurocs_mean, weighted_aurocs_std = np.mean(weighted_aurocs, axis=0), np.std(weighted_aurocs, axis=0)
     for i, (m, s) in enumerate(zip(weighted_aurocs_mean, weighted_aurocs_std)):
        print(f"Weighted AUROC {i+1}: {m:.3f} std {s:.3f}")
+    
+    from utils.save_results import save_results
+    save_results('UA_KAN', dataset,
+          {'architecture': architecture, 'grids': grids, 'learning_rate': learning_rate,
+           'loss': loss, 'use_base_update': use_base_update, 'epochs': epochs, 'model_num': model_num},
+          trainAccs, trainLosses, testAccs, testLosses, aurocs, weighted_aurocs)
+
 
 
 
@@ -86,5 +92,6 @@ if __name__ == "__main__":
     parser.add_argument('--model_num',                 type=int,   default=5)
     parser.add_argument('--loss',                      type=str,   default='proposed', choices=['proposed', 'ce'])
     parser.add_argument('--use_base_update',           type=lambda x: x.lower() != 'false', default=True)
+    parser.add_argument('--dataset',                   type=str, default='ambrosia', choices=['ambrosia', 'heart'])
 
     main(**vars(parser.parse_args()))

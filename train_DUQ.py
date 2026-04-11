@@ -39,6 +39,12 @@ def main(architecture, learning_rate, epochs, l_gradient_penalty, length_scale, 
     for i, (m, s) in enumerate(zip(aurocs_mean, aurocs_std)):
         print(f"AUROC {i+1}: {m:.3f} std {s:.3f}")
 
+    from utils.save_results import save_results
+    save_results('DUQ', dataset,
+             {'architecture': architecture, 'learning_rate': learning_rate, 'epochs': epochs, 'model_num': model_num},
+             trainAccs, trainLosses, testAccs, testLosses, aurocs)
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
