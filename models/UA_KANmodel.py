@@ -71,34 +71,10 @@ class UA_KANLayer(nn.Module):
         return ret
 
     def layer_uncertainty(self, x):
-        if self.layernorm:
-            spline_basis = self.rbf(self.layernorm(x))
-        else:
-            spline_basis = self.rbf(x)
-        ret = self.spline_linear(spline_basis.view(*spline_basis.shape[:-2], -1))
-        if self.use_base_update:
-            base = self.base_linear(self.base_activation(x))
-            ret = ret + base
-        sret = F.softmax(ret,dim=1)
-        uncertainty = torch.sum(sret* torch.log(sret + 1e-10), dim=1)
-        return uncertainty
-
-
-    # NORM uncertainty
-    # def layer_uncertainty(self, x, epsilon=1e-8):
-    #     if self.layernorm is not None:
-    #         spline_basis = self.rbf(self.layernorm(x))
-    #     else:
-    #         spline_basis = self.rbf(x)
-    #     ret = self.spline_linear(spline_basis.view(*spline_basis.shape[:-2], -1))
-    #     if self.use_base_update:
-    #         base = self.base_linear(self.base_activation(x))
-    #         ret = ret + base
-
-    #     l1_norm = ret.abs().sum(dim=-1)
-    #     l0_norm = (ret > 0).float().sum(dim=-1)
-    #     return l1_norm / (l0_norm + epsilon)
-
+        spline_basis = self.rbf(x)
+        distw = spline_basis / (spline_basis.sum(dim=-1, keepdim=True) + 1e-8) 
+        entropy = -(distw * torch.log(distw + 1e-10)).sum(dim=-1)  
+        return entropy.mean(dim=-1) 
 
 
     def plot_curve(

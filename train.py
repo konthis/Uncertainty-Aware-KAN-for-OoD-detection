@@ -64,7 +64,12 @@ def networkTrain(net_type, model, optimizer, scheduler, loss_fn,
             for fl in false_loaders
         ]
 
-        scheduler.step(test_loss)
+        # scheduler.step(test_loss)
+        if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            scheduler.step(test_loss)
+        else:
+            scheduler.step()
+
         train_accs.append(train_acc);   train_losses.append(train_loss)
         test_accs.append(test_acc);     test_losses.append(test_loss)
         aurocs.append(current_aurocs)

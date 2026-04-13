@@ -36,11 +36,12 @@ def main(architecture, grids, learning_rate, learning_rate_denominator, denomina
             [{'params': other_params}, {'params': denom_params, 'lr': learning_rate_denominator}],
             lr=learning_rate, weight_decay=weight_decay, momentum=gamma
         )
-        scheduler = ReduceLROnPlateau(optimizer, 'min', patience=5)
+        scheduler = ReduceLROnPlateau(optimizer, 'min', patience=25)
+                
 
         trainAcc, trainLoss, testAcc, testLoss, auroc = networkTrain(
             'kan', model, optimizer, scheduler,
-            lossFunction, trainLoader, testLoader, falseloaders, numClasses, 0, epochs
+            lossFunction, trainLoader, testLoader, falseloaders, numClasses, 0, epochs,
         )
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

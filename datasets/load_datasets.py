@@ -87,7 +87,6 @@ def load_heart_disease(seed, path='../datasets'):
 
     df = df.dropna()
 
-    # encode string categoricals as integers (ordinal/label encoding)
     for col in ['sex', 'cp', 'thal', 'restecg', 'slope']:
         if col in df.columns and df[col].dtype == object:
             df[col] = LabelEncoder().fit_transform(df[col])
@@ -114,6 +113,66 @@ def load_heart_disease(seed, path='../datasets'):
         torch.tensor(y_test.values.copy(), dtype=torch.long)
     )
 
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False)
+
+    return test_dataset, train_loader, test_loader, X_train.shape[1]
+
+def load_ctg(seed, path='../datasets'):
+    import numpy as np, zipfile
+    CTG_FEATURES = [
+    'LB', 'AC', 'FM', 'UC', 'DL', 'DS', 'DP',
+    'ASTV', 'MSTV', 'ALTV', 'MLTV',
+    'Width', 'Min', 'Max', 'Nmax', 'Nzeros',
+    'Mode', 'Mean', 'Median', 'Variance', 'Tendency',
+    ]
+    dest = os.path.join(path, 'fetal_health.csv')
+    if not os.path.exists(dest):
+        zip_path = os.path.join(path, 'archive.zip')
+        if not os.path.exists(zip_path):
+            raise FileNotFoundError("Place archive.zip in ./datasets/")
+        print("Extracting archive.zip...")
+        with zipfile.ZipFile(zip_path, 'r') as z:
+            found = None
+            for name in z.namelist():
+                if not name.endswith('.csv'):
+                    continue
+                with z.open(name) as f:
+                    header = f.readline().decode('utf-8', errors='ignore')
+                    if 'NSP' in header:
+                        found = name
+                        break
+            if found is None:
+                raise FileNotFoundError(f"No CSV with NSP column in archive. Files: {z.namelist()}")
+            with z.open(found) as src, open(dest, 'wb') as dst:
+                dst.write(src.read())
+        print(f"Extracted '{found}' to {dest}")
+
+    df = pd.read_csv(dest)
+    df.columns = df.columns.str.strip()
+    df = df.replace('?', np.nan)
+
+    X = df[CTG_FEATURES].copy()
+    mask = X.notna().all(axis=1)
+    X = X[mask].reset_index(drop=True)
+    y = df.loc[mask, 'NSP'].astype(int).values - 1  # 1,2,3 → 0,1,2
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=seed, stratify=y
+    )
+    for col in X_train.columns:
+        scaler = StandardScaler()
+        X_train[col] = scaler.fit_transform(X_train[[col]])
+        X_test[col]  = scaler.transform(X_test[[col]])
+
+    train_dataset = TensorDataset(
+        torch.tensor(X_train.values.copy(), dtype=torch.float32),
+        torch.tensor(y_train.copy(),        dtype=torch.long)
+    )
+    test_dataset = TensorDataset(
+        torch.tensor(X_test.values.copy(), dtype=torch.float32),
+        torch.tensor(y_test.copy(),        dtype=torch.long)
+    )
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False)
 
@@ -155,7 +214,6 @@ def loadAllDataloaders(root: str = './datasets', binary: bool = False, dataset='
         _, train_loader, test_loader, dimensions = load_D1(seed, root, binary=binary)
     elif dataset == 'heart':
         _, train_loader, test_loader, dimensions = load_heart_disease(seed, root)
-
     noised = GaussianNoisedDataset(train_loader.dataset)
     noised_loader = DataLoader(noised, batch_size=BATCH_SIZE, shuffle=True)
 
@@ -166,6 +224,5 @@ def loadAllDataloaders(root: str = './datasets', binary: bool = False, dataset='
         noised_loader,
     ]
     return train_loader, test_loader, *false_loaders
-
 
 
